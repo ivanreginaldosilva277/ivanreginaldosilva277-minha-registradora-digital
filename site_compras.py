@@ -12,7 +12,6 @@ ARQUIVO_DADOS = "banco_mercado_final.json"
 
 st.set_page_config(page_title="Calculadora Ivan", page_icon="🛒", layout="centered")
 
-# Função para buscar o nome do produto na internet
 def buscar_produto(codigo):
     try:
         url = f"https://openfoodfacts.org{codigo}.json"
@@ -28,7 +27,6 @@ if "carrinho" not in st.session_state:
 
 st.title("🛒 Calculadora de Mercado")
 
-# --- BOTÃO DE LER CÓDIGO ---
 st.subheader("📟 Escanear Produto")
 foto = st.camera_input("Aponte para o código de barras")
 
@@ -37,32 +35,38 @@ if foto:
     detector = cv2.barcode.BarcodeDetector()
     resultado = detector.detectAndDecode(imagem)
     
-    if resultado and resultado:
-        codigo = str(resultado).strip()
-        with st.spinner(f"Buscando código {codigo}..."):
-            nome = buscar_produto(codigo)
-            
-            if not nome:
-                st.warning(f"Código {codigo} lido, mas o nome não está na internet.")
-                nome_manual = st.text_input("Nome do Produto:", key="n_man")
-                preco_manual = st.number_input("Preço R$:", min_value=0.0, key="p_man")
+    # AJUSTE AQUI: Limpeza do código lido
+    if resultado and resultado[0]:
+        # Pegamos apenas a primeira parte da resposta e removemos tudo que não for número
+        codigo_sujo = str(resultado[0])
+        codigo_limpo = re.sub(r'\D', '', codigo_sujo)
+        
+        if codigo_limpo:
+            with st.spinner(f"Buscando código {codigo_limpo}..."):
+                nome = buscar_produto(codigo_limpo)
                 
-                if st.button("Salvar e Adicionar"):
-                    if nome_manual:
-                        st.session_state.carrinho[nome_manual] = {"preco": preco_manual, "qtd": 1}
-                        st.success(f"✅ {nome_manual} adicionado!")
-                        st.rerun()
-            else:
-                if nome not in st.session_state.carrinho:
-                    st.session_state.carrinho[nome] = {"preco": 0.0, "qtd": 1}
+                if not nome:
+                    st.warning(f"Código {codigo_limpo} lido, mas não achei na internet.")
+                    nome_manual = st.text_input("Nome do Produto:", key="n_man")
+                    preco_manual = st.number_input("Preço R$:", min_value=0.0, key="p_man")
+                    
+                    if st.button("Salvar e Adicionar"):
+                        if nome_manual:
+                            st.session_state.carrinho[nome_manual] = {"preco": preco_manual, "qtd": 1}
+                            st.success(f"✅ {nome_manual} adicionado!")
+                            st.rerun()
                 else:
-                    st.session_state.carrinho[nome]["qtd"] += 1
-                st.success(f"✅ {nome} encontrado!")
-                st.rerun()
+                    if nome not in st.session_state.carrinho:
+                        st.session_state.carrinho[nome] = {"preco": 0.0, "qtd": 1}
+                    else:
+                        st.session_state.carrinho[nome]["qtd"] += 1
+                    st.success(f"✅ {nome} encontrado!")
+                    st.rerun()
+        else:
+            st.error("Não consegui extrair um número válido do código.")
     else:
-        st.error("Não consegui ler. Tente focar melhor ou deixar o código bem reto.")
+        st.error("Não consegui ler as barras. Tente focar melhor!")
 
-# --- EXIBIÇÃO DO CARRINHO ---
 st.write("---")
 total = 0
 if st.session_state.carrinho:
