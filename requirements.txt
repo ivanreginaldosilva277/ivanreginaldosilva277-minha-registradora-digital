@@ -1,2 +1,3 @@
 streamlit
+streamlit-camera-desktop-web-rtc
 requests
