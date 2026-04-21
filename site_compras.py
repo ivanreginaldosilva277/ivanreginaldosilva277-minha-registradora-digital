@@ -1,11 +1,10 @@
 import streamlit as st
-import re
-import json
-import os
 import cv2
 import numpy as np
 import requests
-from pyzbar.pyzbar import decode
+import re
+import os
+import json
 from datetime import datetime, timedelta
 
 # --- CONFIGURAÇÕES ---
@@ -36,7 +35,7 @@ def salvar_dados(dados):
 if "tela" not in st.session_state: st.session_state.tela = "login"
 if "carrinho" not in st.session_state: st.session_state.carrinho = {}
 
-# --- TELA DE LOGIN/CADASTRO (Resumido para o post) ---
+# --- TELAS DE LOGIN/CADASTRO ---
 if st.session_state.tela == "login":
     st.title("🛒 Calculadora de Mercado")
     with st.form("login_form"):
@@ -72,14 +71,16 @@ elif st.session_state.tela == "app":
 
     with aba1:
         st.subheader("📸 Escanear por Foto")
-        foto = st.camera_input("Aponte para as barrinhas do produto")
+        foto = st.camera_input("Aponte para o código de barras")
         
         if foto:
             img = cv2.imdecode(np.frombuffer(foto.getvalue(), np.uint8), cv2.IMREAD_COLOR)
-            codigos_lidos = decode(img)
+            # Detector do próprio OpenCV
+            detector = cv2.barcode.BarcodeDetector()
+            ok, pontos, codigos, tipos = detector.detectAndDecode(img)
             
-            if codigos_lidos:
-                cod = codigos_lidos[0].data.decode('utf-8')
+            if ok:
+                cod = codigos[0]
                 st.success(f"Código detectado: {cod}")
                 
                 dados_globais = carregar_dados()
@@ -96,13 +97,14 @@ elif st.session_state.tela == "app":
                     if st.button(f"Adicionar {nome_p}"):
                         dados_globais["produtos_novos"][cod] = {"nome": nome_p, "preco": p_atual}
                         salvar_dados(dados_globais)
-                        st.session_state.carrinho[nome_p] = st.session_state.carrinho.get(nome_p, {'preco': p_atual, 'qtd': 0})
+                        if nome_p not in st.session_state.carrinho:
+                            st.session_state.carrinho[nome_p] = {'preco': p_atual, 'qtd': 0}
                         st.session_state.carrinho[nome_p]['qtd'] += 1
                         st.rerun()
                 else:
                     st.warning("Não achei o nome. Digite abaixo para me ensinar!")
             else:
-                st.warning("Não li as barras. Tente aproximar ou focar melhor.")
+                st.warning("Não li as barras. Tente focar melhor nas barrinhas!")
 
         st.write("---")
         total = sum(i['preco'] * i['qtd'] for i in st.session_state.carrinho.values())
