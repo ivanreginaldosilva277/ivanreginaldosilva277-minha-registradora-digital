@@ -1,5 +1,4 @@
 import streamlit as st
-from camera_input_live import camera_input_live
 import requests
 import re
 
@@ -18,35 +17,39 @@ def buscar_nome(codigo):
 
 if "carrinho" not in st.session_state: st.session_state.carrinho = {}
 
-st.title("🛒 Scanner Automático")
+st.title("🛒 Scanner Ultra Rápido")
 
-# --- O SCANNER VIVO ---
-st.subheader("📟 Aponte para o Código")
-st.write("O sistema lerá as barras automaticamente (sem bater foto)")
+# --- O CAMPO QUE ACIONA O SCANNER DO CELULAR ---
+st.subheader("📟 Bipar Produto")
+st.write("Clique no campo abaixo e use o **Scanner do Teclado**:")
 
-# Este componente abre o vídeo da câmera traseira
-imagem_viva = camera_input_live()
+# Campo de texto preparado para o "Bip" do celular
+cod_lido = st.text_input("Toque aqui para escanear", key="input_scan")
 
-if imagem_viva:
-    # Aqui o Streamlit já tenta extrair o texto/código da imagem viva
-    # Obs: Se o componente não ler direto, ele liberará o campo abaixo
-    st.info("Buscando barras na imagem...")
-
-st.write("---")
-# Campo reserva caso a câmera demore a focar
-cod_manual = st.text_input("Ou use o scanner do teclado aqui:")
-
-if cod_manual:
-    cod = re.sub(r'\D', '', cod_manual)
-    nome = buscar_nome(cod)
-    if nome:
-        st.success(f"✅ {nome}")
-        preco = st.number_input("Preço R$:", value=0.0, key=f"p_{cod}")
-        if st.button("Adicionar"):
-            st.session_state.carrinho[nome] = st.session_state.carrinho.get(nome, {'preco': preco, 'qtd': 0})
-            st.session_state.carrinho[nome]['qtd'] += 1
-            st.rerun()
+if cod_lido:
+    cod = re.sub(r'\D', '', cod_lido)
+    if cod:
+        with st.spinner("Buscando produto..."):
+            nome = buscar_nome(cod)
+            if nome:
+                st.success(f"✅ {nome}")
+                preco = st.number_input("Preço R$:", value=0.0, key=f"p_{cod}")
+                if st.button(f"Confirmar e Somar {nome}"):
+                    if nome not in st.session_state.carrinho:
+                        st.session_state.carrinho[nome] = {'preco': preco, 'qtd': 1}
+                    else:
+                        st.session_state.carrinho[nome]['qtd'] += 1
+                    st.session_state.input_scan = "" # Limpa o campo
+                    st.rerun()
+            else:
+                st.warning("Não achei na internet. Digite o nome:")
+                n_man = st.text_input("Nome:")
+                p_man = st.number_input("Preço:", key="p_man")
+                if st.button("Adicionar Manual"):
+                    st.session_state.carrinho[n_man] = {"preco": p_man, "qtd": 1}
+                    st.rerun()
 
 # --- TOTAL ---
+st.write("---")
 total = sum(item['preco'] * item['qtd'] for item in st.session_state.carrinho.values())
 st.metric("TOTAL DA COMPRA", f"R$ {total:.2f}")
