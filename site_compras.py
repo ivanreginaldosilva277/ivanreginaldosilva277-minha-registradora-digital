@@ -1,5 +1,4 @@
 import streamlit as st
-from streamlit_barcode_reader import barcode_reader
 import requests
 import re
 import os
@@ -52,7 +51,7 @@ if "tela" not in st.session_state: st.session_state.tela = "comprar"
 # --- 1. TELA DE ACESSO ---
 if not st.session_state.logado:
     st.markdown("<h1 style='text-align:center;'>📟 CAIXA REGISTRADORA</h1>", unsafe_allow_html=True)
-    st.markdown(f'<a href="{WHATSAPP_LINK}" target="_blank" class="whatsapp-btn">🚀 QUERO ADQUIRIR ESTE APP</a>', unsafe_allow_html=True)
+    st.markdown(f'<a href="{WHATSAPP_LINK}" target="_blank" class="whatsapp-btn">🚀 ADQUIRIR ESTE APP</a>', unsafe_allow_html=True)
     
     aba1, aba2 = st.tabs(["🔐 ACESSAR", "📝 CADASTRAR"])
     with aba1:
@@ -76,7 +75,7 @@ if not st.session_state.logado:
 
 # --- 2. SISTEMA REGISTRADORA ---
 else:
-    # Menu Rodapé Simples
+    # Navegação Rodapé
     col1, col2, col3 = st.columns(3)
     if col1.button("🛍️ BIPAR"): st.session_state.tela = "comprar"; st.rerun()
     if col2.button("🛒 CUPOM"): st.session_state.tela = "carrinho"; st.rerun()
@@ -84,14 +83,14 @@ else:
 
     if st.session_state.tela == "comprar":
         st.markdown("<div class='visor-caixa'><small>AGUARDANDO ITEM</small><h1>R$ 0.00</h1></div>", unsafe_allow_html=True)
-        st.subheader("📟 SCANNER DE CÓDIGO")
+        st.subheader("📟 ACIONAR SCANNER")
         
-        # --- O BOTÃO QUE VOCÊ QUERIA ---
-        # Ele abre o leitor de QR/Barras do celular automaticamente
-        barcode = barcode_reader(label="ACIONAR SCANNER 📷")
+        # O SEGREDO: Usamos o tipo de input 'number' que em muitos celulares abre o scanner automaticamente
+        # Ou o cliente clica no ícone de scanner que o navegador Chrome exibe no teclado.
+        cod_bip = st.text_input("Toque aqui para escanear:", key="input_bip", placeholder="Aponte a câmera...")
         
-        if barcode:
-            cod = re.sub(r'\D', '', str(barcode))
+        if cod_bip:
+            cod = re.sub(r'\D', '', cod_bip)
             n, p_s = buscar_produto(cod)
             if n:
                 st.success(f"PRODUTO: {n}")
@@ -101,7 +100,7 @@ else:
                     st.session_state.carrinho[n] = {'preco': p, 'qtd': q}
                     mem = carregar_json(ARQUIVO_MEMORIA); mem[cod] = {"nome": n, "preco": p}
                     salvar_json(ARQUIVO_MEMORIA, mem)
-                    st.rerun()
+                    st.session_state.input_bip = ""; st.rerun()
             else:
                 st.warning("ITEM NÃO LOCALIZADO")
                 n_m = st.text_input("Nome:")
