@@ -15,31 +15,25 @@ st.set_page_config(page_title="Minha Compra Segura", page_icon="🛒", layout="c
 
 def buscar_nome_internet(codigo):
     try:
-        # Link corrigido para busca global de produtos
         url = f"https://openfoodfacts.org{codigo}.json"
         resposta = requests.get(url, timeout=5)
         if resposta.status_code == 200:
             dados = resposta.json()
             if dados.get("status") == 1:
                 return dados["product"].get("product_name", "Produto Desconhecido")
-    except:
-        return None
+    except: return None
     return None
 
 def carregar_dados():
     if os.path.exists(ARQUIVO_DADOS):
-        with open(ARQUIVO_DADOS, "r") as f:
-            return json.load(f)
+        with open(ARQUIVO_DADOS, "r") as f: return json.load(f)
     return {"usuarios": {}, "historico": {}, "produtos_novos": {}}
 
 def salvar_dados(dados):
-    with open(ARQUIVO_DADOS, "w") as f:
-        json.dump(dados, f)
+    with open(ARQUIVO_DADOS, "w") as f: json.dump(dados, f)
 
-if "tela" not in st.session_state:
-    st.session_state.tela = "login"
-if "carrinho" not in st.session_state:
-    st.session_state.carrinho = {}
+if "tela" not in st.session_state: st.session_state.tela = "login"
+if "carrinho" not in st.session_state: st.session_state.carrinho = {}
 
 # --- TELAS DE LOGIN/CADASTRO ---
 if st.session_state.tela == "login":
@@ -53,11 +47,8 @@ if st.session_state.tela == "login":
                 st.session_state.usuario_logado = u_log
                 st.session_state.tela = "app"
                 st.rerun()
-            else:
-                st.error("Dados incorretos.")
-    if st.button("Cadastrar 📝"):
-        st.session_state.tela = "cadastro"
-        st.rerun()
+            else: st.error("Dados incorretos.")
+    if st.button("Cadastrar 📝"): st.session_state.tela = "cadastro"; st.rerun()
 
 elif st.session_state.tela == "cadastro":
     st.title("📝 Cadastro Novo")
@@ -72,59 +63,50 @@ elif st.session_state.tela == "cadastro":
             d["historico"][login_id] = {}
             salvar_dados(d)
             st.success("Sucesso! Volte ao login.")
-    if st.button("⬅️ Voltar"):
-        st.session_state.tela = "login"
-        st.rerun()
+    if st.button("⬅️ Voltar"): st.session_state.tela = "login"; st.rerun()
 
 elif st.session_state.tela == "app":
     st.title(f"👋 Olá, {st.session_state.usuario_logado}")
     aba1, aba2 = st.tabs(["🛒 Compra", "📂 Histórico"])
 
     with aba1:
-        st.subheader("📸 Escanear por Foto")
-        foto = st.camera_input("Aponte para o código de barras")
+        st.subheader("🚀 Scanner Rápido")
+        # Campo preparado para o scanner do teclado
+        input_rapido = st.text_input("Clique aqui e use o scanner do teclado:", key="input_direto")
         
-        if foto:
-            img = cv2.imdecode(np.frombuffer(foto.getvalue(), np.uint8), cv2.IMREAD_COLOR)
-            detector = cv2.barcode.BarcodeDetector()
-            
-            # Correção para evitar erro de desempacotamento (ValueError)
-            resultado = detector.detectAndDecode(img)
-            
-            if resultado and resultado[0]:
-                cod = resultado[0][0] # Pega o primeiro código detectado
-                st.success(f"Código detectado: {cod}")
-                
-                dados_globais = carregar_dados()
-                prod_info = dados_globais["produtos_novos"].get(cod, {})
-                nome_p = prod_info.get("nome")
-                preco_p = prod_info.get("preco", 0.0)
-
-                if not nome_p:
-                    with st.spinner("Buscando na internet..."):
-                        nome_p = buscar_nome_internet(cod)
-                
+        if input_rapido:
+            cod = re.sub(r'\D', '', input_rapido)
+            with st.spinner("Buscando produto..."):
+                nome_p = buscar_nome_internet(cod)
                 if nome_p:
-                    st.write(f"🔎 **Item:** {nome_p}")
-                    p_atual = st.number_input("Preço R$:", value=float(preco_p), key=f"p_{cod}")
-                    if st.button(f"Confirmar {nome_p}"):
-                        dados_globais["produtos_novos"][cod] = {"nome": nome_p, "preco": p_atual}
-                        salvar_dados(dados_globais)
-                        if nome_p not in st.session_state.carrinho:
-                            st.session_state.carrinho[nome_p] = {'preco': p_atual, 'qtd': 0}
-                        st.session_state.carrinho[nome_p]['qtd'] += 1
-                        st.rerun()
+                    st.success(f"✅ {nome_p}")
+                    if nome_p not in st.session_state.carrinho:
+                        st.session_state.carrinho[nome_p] = {'preco': 0.0, 'qtd': 0}
+                    st.session_state.carrinho[nome_p]['qtd'] += 1
+                    # Limpa o campo e recarrega
+                    st.session_state.input_direto = ""
+                    st.rerun()
                 else:
-                    st.warning("Não achei o nome na internet. Tente focar melhor!")
-            else:
-                st.warning("Não li as barras. Tente deixar o código bem reto e nítido!")
+                    st.warning("Produto não encontrado na internet.")
 
         st.write("---")
-        total = sum(i['preco'] * i['qtd'] for i in st.session_state.carrinho.values())
-        for n, i in st.session_state.carrinho.items():
-            st.write(f"**{i['qtd']}x {n}** - R$ {i['preco']*i['qtd']:.2f}")
+        total = 0
+        for n in list(st.session_state.carrinho.keys()):
+            item = st.session_state.carrinho[n]
+            sub = item['preco'] * item['qtd']
+            total += sub
+            col1, col2, col3 = st.columns([2,1,1])
+            col1.write(f"**{n}**")
+            with col2:
+                # Permite ajustar o preço na hora
+                p = st.number_input("Preço R$", value=float(item['preco']), key=f"p_{n}")
+                st.session_state.carrinho[n]['preco'] = p
+            with col3:
+                q = st.number_input("Qtd", 0, 100, int(item['qtd']), key=f"q_{n}")
+                if q == 0: del st.session_state.carrinho[n]; st.rerun()
+                st.session_state.carrinho[n]['qtd'] = q
         
-        st.metric("TOTAL", f"R$ {total:.2f}")
+        st.metric("TOTAL ATUAL", f"R$ {total:.2f}")
         
         if st.sidebar.button("Sair"):
             del st.session_state.usuario_logado
