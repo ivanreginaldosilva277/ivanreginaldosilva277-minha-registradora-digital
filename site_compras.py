@@ -1,4 +1,5 @@
 import streamlit as st
+from streamlit_barcode_reader import barcode_reader
 import requests
 import re
 import os
@@ -46,7 +47,7 @@ st.markdown("""
 
 if "logado" not in st.session_state: st.session_state.logado = False
 if "carrinho" not in st.session_state: st.session_state.carrinho = {}
-if "tela" not in st.session_state: st.session_state.tela = "inicio"
+if "tela" not in st.session_state: st.session_state.tela = "comprar"
 
 # --- 1. TELA DE ACESSO ---
 if not st.session_state.logado:
@@ -83,13 +84,14 @@ else:
 
     if st.session_state.tela == "comprar":
         st.markdown("<div class='visor-caixa'><small>AGUARDANDO ITEM</small><h1>R$ 0.00</h1></div>", unsafe_allow_html=True)
-        st.subheader("📟 BIPAR AGORA")
+        st.subheader("📟 SCANNER DE CÓDIGO")
         
-        # O SEGREDO: Clique no campo e use o botão de scanner que aparece no teclado Samsung
-        cod_bip = st.text_input("Toque aqui para acionar o scanner do teclado:", key="input_bip")
+        # --- O BOTÃO QUE VOCÊ QUERIA ---
+        # Ele abre o leitor de QR/Barras do celular automaticamente
+        barcode = barcode_reader(label="ACIONAR SCANNER 📷")
         
-        if cod_bip:
-            cod = re.sub(r'\D', '', cod_bip)
+        if barcode:
+            cod = re.sub(r'\D', '', str(barcode))
             n, p_s = buscar_produto(cod)
             if n:
                 st.success(f"PRODUTO: {n}")
@@ -99,7 +101,7 @@ else:
                     st.session_state.carrinho[n] = {'preco': p, 'qtd': q}
                     mem = carregar_json(ARQUIVO_MEMORIA); mem[cod] = {"nome": n, "preco": p}
                     salvar_json(ARQUIVO_MEMORIA, mem)
-                    st.session_state.input_bip = ""; st.rerun()
+                    st.rerun()
             else:
                 st.warning("ITEM NÃO LOCALIZADO")
                 n_m = st.text_input("Nome:")
