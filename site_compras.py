@@ -1,5 +1,4 @@
 import streamlit as st
-from streamlit_barcode_scanner import st_barcode_scanner
 import requests
 import re
 import os
@@ -22,24 +21,38 @@ def buscar_nome_internet(codigo):
     except: return None
     return None
 
-# (Mantendo suas funções de carregar/salvar dados e login...)
-
 if "carrinho" not in st.session_state: st.session_state.carrinho = {}
 
-# --- DENTRO DA ABA DE COMPRA ---
-st.subheader("📟 Scanner de Barras")
-st.write("Aponte para o código e ele lerá sozinho:")
+# --- INTERFACE ---
+st.title("🛒 Calculadora de Mercado")
 
-# Este é o comando que faz a mágica de ler sem bater foto
-codigo_lido = st_barcode_scanner()
+st.subheader("📟 Scanner de Barras")
+st.write("Clique no campo abaixo e use o **Scanner do Teclado** do seu Samsung:")
+
+# Campo de texto que processa o código sozinho ao receber o dado
+codigo_lido = st.text_input("Toque aqui para escanear:", key="input_scan")
 
 if codigo_lido:
-    cod = str(codigo_lido).strip()
-    with st.spinner(f"Lendo código {cod}..."):
+    cod = re.sub(r'\D', '', codigo_lido)
+    with st.spinner(f"Buscando produto..."):
         nome_p = buscar_nome_internet(cod)
         if nome_p:
             if nome_p not in st.session_state.carrinho:
                 st.session_state.carrinho[nome_p] = {'preco': 0.0, 'qtd': 0}
             st.session_state.carrinho[nome_p]['qtd'] += 1
             st.success(f"✅ {nome_p} adicionado!")
+            # Limpa para o próximo
+            st.session_state.input_scan = ""
             st.rerun()
+        else:
+            st.warning("Produto não encontrado. Tente outro!")
+
+st.write("---")
+total = sum(i['preco'] * i['qtd'] for i in st.session_state.carrinho.values())
+for n, i in st.session_state.carrinho.items():
+    col1, col2 = st.columns([2,1])
+    col1.write(f"**{i['qtd']}x {n}**")
+    p = col2.number_input("R$", value=float(i['preco']), key=f"p_{n}")
+    st.session_state.carrinho[n]['preco'] = p
+
+st.metric("TOTAL", f"R$ {total:.2f}")
