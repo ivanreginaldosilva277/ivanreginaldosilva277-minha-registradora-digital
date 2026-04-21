@@ -5,6 +5,8 @@ import requests
 import re
 import os
 import json
+from pyzbar.pyzbar import decode
+from PIL import Image
 from datetime import datetime
 
 # --- CONFIGURAÇÕES IVAN ---
@@ -32,141 +34,164 @@ def buscar_produto(codigo):
     try:
         url = f"https://openfoodfacts.org{codigo}.json"
         r = requests.get(url, timeout=3)
-        if r.status_code == 200 and r.json().get("status") == 1:
-            p = r.json()["product"]
-            return p.get("product_name_pt") or p.get("product_name"), 0.0
+        if r.status_code == 200:
+            d = r.json()
+            if d.get("status") == 1:
+                p = d["product"]
+                nome = p.get("product_name_pt") or p.get("product_name")
+                if nome: return nome.strip().upper(), 0.0
     except: pass
     return None, 0.0
 
-# --- ESTILO ---
-st.markdown("<style>.stButton>button { width: 100%; border-radius: 10px; background-color: #2e7d32; color: white; font-weight: bold; }</style>", unsafe_allow_html=True)
+# --- ESTILO VISUAL TURBINADO ---
+st.markdown(f"""
+    <style>
+    .main {{ background-color: #f5f7f9; }}
+    .stButton>button {{ width: 100%; border-radius: 20px; background: linear-gradient(135deg, #2e7d32 0%, #1b5e20 100%); color: white; height: 3.5em; font-weight: bold; border: none; box-shadow: 0 4px 15px rgba(0,0,0,0.2); transition: 0.3s; }}
+    .stButton>button:hover {{ transform: scale(1.02); }}
+    .whatsapp-btn {{ background: linear-gradient(135deg, #25d366 0%, #128c7e 100%); color: white !important; padding: 18px; border-radius: 20px; text-align: center; text-decoration: none; display: block; font-weight: bold; margin: 20px 0; box-shadow: 0 4px 15px rgba(37,211,102,0.3); font-size: 18px; }}
+    .logo-container {{ text-align: center; padding: 20px; background: white; border-radius: 30px; box-shadow: 0 10px 30px rgba(0,0,0,0.05); margin-bottom: 30px; }}
+    .title-main {{ color: #1b5e20; font-size: 32px; font-weight: 900; margin-bottom: 5px; }}
+    </style>
+    """, unsafe_allow_html=True)
 
-# --- CONTROLE DE TELAS ---
+# --- INICIALIZAÇÃO DE ESTADO ---
 if "logado" not in st.session_state: st.session_state.logado = False
 if "carrinho" not in st.session_state: st.session_state.carrinho = {}
 if "usuario_nome" not in st.session_state: st.session_state.usuario_nome = ""
 
-# --- 1. TELA DE LOGIN / CADASTRO ---
+# --- 1. TELA INICIAL / LOGIN / CADASTRO ---
 if not st.session_state.logado:
-    tab_l, tab_c = st.tabs(["Login", "Cadastrar Novo"])
+    st.markdown("""
+        <div class="logo-container">
+            <span style="font-size: 80px;">🛒</span>
+            <div class="title-main">MINHA COMPRA SEGURA</div>
+            <p style="color: #666;">O controle total do seu bolso na hora do mercado.</p>
+        </div>
+    """, unsafe_allow_html=True)
     
-    with tab_l:
-        st.title("🛒 Entrar")
+    aba_entrar, aba_cadastrar = st.tabs(["🔑 ENTRAR NO APP", "📝 CRIAR CONTA GRÁTIS"])
+    
+    with aba_entrar:
         with st.form("login"):
-            u = st.text_input("CPF ou Login:").strip().lower()
-            s = st.text_input("Senha:", type="password")
-            if st.form_submit_button("ENTRAR 🚀"):
+            u = st.text_input("Seu Login (CPF):").strip().lower()
+            s = st.text_input("Sua Senha:", type="password")
+            if st.form_submit_button("ACESSAR MINHA CONTA 🚀"):
                 dados = carregar_json(ARQUIVO_DADOS)
                 if u in dados.get("usuarios", {}) and dados["usuarios"][u]["senha"] == s:
                     st.session_state.logado = True
                     st.session_state.usuario_nome = u
                     st.rerun()
-                else: st.error("Erro no login.")
-        st.markdown(f'<a href="{WHATSAPP_LINK}" target="_blank" style="text-decoration:none; color:white; background:#25d366; padding:10px; border-radius:10px; display:block; text-align:center;">💬 Fale com o Ivan</a>', unsafe_allow_html=True)
+                else: st.error("Login ou senha incorretos.")
+        
+        st.markdown(f'<a href="{WHATSAPP_LINK}" target="_blank" class="whatsapp-btn">🚀 ADQUIRIR ESTE APLICATIVO</a>', unsafe_allow_html=True)
 
-    with tab_c:
-        st.title("📝 Cadastro")
+    with aba_cadastrar:
         with st.form("cadastro"):
             nc = st.text_input("Nome Completo:")
             cc = st.text_input("CPF (será seu login):")
-            sc = st.text_input("Senha:")
-            if st.form_submit_button("FINALIZAR"):
+            sc = st.text_input("Crie uma Senha:")
+            if st.form_submit_button("FINALIZAR MEU CADASTRO ✅"):
                 login_id = re.sub(r'\D', '', cc)
                 if nc and login_id and sc:
                     dados = carregar_json(ARQUIVO_DADOS)
                     if "usuarios" not in dados: dados["usuarios"] = {}
                     dados["usuarios"][login_id] = {"nome": nc, "senha": sc, "historico": []}
                     salvar_json(ARQUIVO_DADOS, dados)
-                    st.success("Cadastrado! Faça o login na aba ao lado.")
+                    st.success("Conta criada! Vá em 'ENTRAR' para acessar.")
 else:
-    # MENU LATERAL PARA NAVEGAR ENTRE AS TELAS 2, 3 e 4
-    st.sidebar.title(f"Olá, {st.session_state.usuario_nome}")
-    menu = st.sidebar.radio("Ir para:", ["🛍️ Comprar", "🛒 Meu Carrinho", "📂 Histórico"])
+    # MENU LATERAL
+    st.sidebar.markdown(f"### 👤 {st.session_state.usuario_nome}")
+    menu = st.sidebar.radio("Navegação", ["🛍️ Bipar Produto", "🛒 Ver Carrinho", "📂 Histórico de Gastos"])
     
-    if st.sidebar.button("Sair"):
+    if st.sidebar.button("Sair do Sistema"):
         st.session_state.logado = False
         st.rerun()
 
-    # --- 2. TELA DE COMPRAS (SCANNER) ---
-    if menu == "🛍️ Comprar":
-        st.title("🛍️ Escanear Produto")
-        foto = st.camera_input("Aponte para o código")
+    # --- 2. TELA DE COMPRAS (SCANNER MELHORADO) ---
+    if menu == "🛍️ Bipar Produto":
+        st.header("🛍️ Escanear Agora")
+        foto = st.camera_input("Aponte para as barras do produto")
+        
         if foto:
-            img = cv2.imdecode(np.frombuffer(foto.getvalue(), np.uint8), cv2.IMREAD_COLOR)
-            res = cv2.barcode.BarcodeDetector().detectAndDecode(img)
-            if res and res[0]:
-                cod = re.sub(r'\D', '', str(res[0]))
-                nome, preco_sug = buscar_produto(cod)
-                
-                if nome:
-                    st.success(f"Item: {nome}")
-                    p_venda = st.number_input("Preço Unitário R$:", value=float(preco_sug), step=0.01)
-                    q_venda = st.number_input("Quantidade:", value=1, min_value=1)
-                    if st.button("➕ JOGAR PARA O CARRINHO"):
-                        st.session_state.carrinho[nome] = {'preco': p_venda, 'qtd': q_venda, 'cod': cod}
-                        # Salva na memória do app para a próxima vez
-                        memoria = carregar_json(ARQUIVO_MEMORIA)
-                        memoria[cod] = {"nome": nome, "preco": p_venda}
-                        salvar_json(ARQUIVO_MEMORIA, memoria)
-                        st.toast("Adicionado!")
-                else:
-                    st.warning("Produto não identificado.")
-                    n_man = st.text_input("Nome do Produto:")
-                    p_man = st.number_input("Preço R$:", min_value=0.0)
-                    q_man = st.number_input("Qtd:", value=1, min_value=1)
-                    if st.button("Adicionar Manual"):
-                        st.session_state.carrinho[n_man] = {'preco': p_man, 'qtd': q_man}
-                        st.rerun()
+            # Novo motor de leitura ZBar (mais forte para barras)
+            img_pil = Image.open(foto)
+            decoded_objects = decode(img_pil)
+            
+            if decoded_objects:
+                for obj in decoded_objects:
+                    cod = obj.data.decode('utf-8')
+                    nome, preco_sug = buscar_produto(cod)
+                    
+                    if nome:
+                        st.balloons()
+                        st.success(f"PRODUTO ENCONTRADO: {nome}")
+                        p_venda = st.number_input("Preço Unitário R$:", value=float(preco_sug), step=0.01)
+                        q_venda = st.number_input("Quantas unidades?", value=1, min_value=1)
+                        if st.button("➕ ADICIONAR AO CARRINHO"):
+                            st.session_state.carrinho[nome] = {'preco': p_venda, 'qtd': q_venda, 'cod': cod}
+                            # Salva na memória
+                            memoria = carregar_json(ARQUIVO_MEMORIA)
+                            memoria[cod] = {"nome": nome, "preco": p_venda}
+                            salvar_json(ARQUIVO_MEMORIA, memoria)
+                            st.toast(f"{nome} adicionado!")
+                    else:
+                        st.warning("Ops! Não achei o nome na rede.")
+                        n_man = st.text_input("Digite o Nome do Produto:")
+                        p_man = st.number_input("Digite o Preço R$:", min_value=0.0)
+                        if st.button("Salvar Manualmente"):
+                            st.session_state.carrinho[n_man] = {'preco': p_man, 'qtd': 1}
+                            st.rerun()
+            else:
+                st.error("Não consegui ler as barras. Tente deixar o código bem reto e iluminado.")
 
-    # --- 3. TELA DO CARRINHO (REVISÃO) ---
-    elif menu == "🛒 Meu Carrinho":
-        st.title("🛒 Revisar Compras")
+    # --- 3. TELA DO CARRINHO ---
+    elif menu == "🛒 Ver Carrinho":
+        st.header("🛒 Seu Carrinho")
         total = 0.0
         if st.session_state.carrinho:
             for n in list(st.session_state.carrinho.keys()):
                 item = st.session_state.carrinho[n]
-                with st.expander(f"{n} - R$ {item['preco'] * item['qtd']:.2f}"):
+                sub = item['preco'] * item['qtd']
+                with st.expander(f"{n} - R$ {sub:.2f}"):
                     c1, c2 = st.columns(2)
-                    nova_q = c1.number_input("Mudar Qtd:", value=int(item['qtd']), key=f"q_{n}")
-                    if c2.button("❌ Excluir", key=f"del_{n}"):
+                    nova_q = c1.number_input("Qtd:", value=int(item['qtd']), key=f"q_{n}", min_value=0)
+                    if c2.button("🗑️ Remover", key=f"del_{n}"):
                         del st.session_state.carrinho[n]
                         st.rerun()
                     st.session_state.carrinho[n]['qtd'] = nova_q
                     total += item['preco'] * nova_q
             
-            st.metric("VALOR TOTAL DA COMPRA", f"R$ {total:.2f}")
-            if st.button("✅ FINALIZAR COMPRA"):
-                st.session_state.temp_total = total
-                st.success("Compra revisada! Vá para a tela de Histórico para salvar.")
+            st.divider()
+            st.metric("TOTAL DA COMPRA", f"R$ {total:.2f}")
+            if st.button("✅ REVISÃO CONCLUÍDA"):
+                st.success("Tudo certo! Agora finalize na aba 'Histórico'.")
         else:
-            st.info("Carrinho vazio.")
+            st.info("O carrinho está vazio.")
 
     # --- 4. TELA DE HISTÓRICO ---
-    elif menu == "📂 Histórico":
-        st.title("📂 Histórico e Salvar")
+    elif menu == "📂 Histórico de Gastos":
+        st.header("📂 Finalizar e Histórico")
         if st.session_state.carrinho:
-            st.subheader("Compra Atual:")
-            for n, i in st.session_state.carrinho.items():
-                st.text(f"• {i['qtd']}x {n} = R$ {i['preco']*i['qtd']:.2f}")
-            
-            if st.button("💾 CONFIRMAR E SALVAR NO HISTÓRICO"):
+            total_final = sum(x['preco']*x['qtd'] for x in st.session_state.carrinho.values())
+            st.subheader(f"Resumo: R$ {total_final:.2f}")
+            if st.button("💾 FINALIZAR E SALVAR COMPRA"):
                 dados = carregar_json(ARQUIVO_DADOS)
                 if "historico" not in dados: dados["historico"] = {}
-                # Salva com data e hora
                 agora = datetime.now().strftime("%d/%m/%Y %H:%M")
                 dados["historico"].setdefault(st.session_state.usuario_nome, []).append({
-                    "data": agora, "itens": st.session_state.carrinho, "total": sum(x['preco']*x['qtd'] for x in st.session_state.carrinho.values())
+                    "data": agora, "itens": st.session_state.carrinho, "total": total_final
                 })
                 salvar_json(ARQUIVO_DADOS, dados)
                 st.session_state.carrinho = {}
-                st.success("✅ Compra salva com sucesso!")
+                st.success("✅ Compra registrada! Você pode consultá-la abaixo.")
                 st.rerun()
         
         st.write("---")
-        st.subheader("Minhas Compras Antigas")
+        st.subheader("Minhas Compras Salvas")
         dados = carregar_json(ARQUIVO_DADOS)
         minhas = dados.get("historico", {}).get(st.session_state.usuario_nome, [])
         for comp in reversed(minhas):
-            with st.expander(f"Compra de {comp['data']} - Total R$ {comp['total']:.2f}"):
+            with st.expander(f"📅 {comp['data']} - Total: R$ {comp['total']:.2f}"):
                 for n, i in comp['itens'].items():
-                    st.write(f"{i['qtd']}x {n}")
+                    st.write(f"• {i['qtd']}x {n} (R$ {i['preco']:.2f})")
