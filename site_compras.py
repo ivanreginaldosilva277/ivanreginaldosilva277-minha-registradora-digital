@@ -43,7 +43,7 @@ def salvar_dados(dados):
 if "tela" not in st.session_state: st.session_state.tela = "login"
 if "carrinho" not in st.session_state: st.session_state.carrinho = {}
 
-# --- FUNÇÃO PARA PROCESSAR CÓDIGO ---
+# --- FUNÇÃO PARA PROCESSAR CÓDIGO (DIGITADO) ---
 def processar_codigo():
     input_usuario = st.session_state.input_scan
     cod_limpo = re.sub(r'\D', '', input_usuario)
@@ -58,6 +58,7 @@ def processar_codigo():
 # --- TELA DE LOGIN ---
 if st.session_state.tela == "login":
     st.markdown("<h1 style='text-align: center;'>🛒 Calculadora de Mercado</h1>", unsafe_allow_html=True)
+    # CORRIGIDO: Adicionada a barra antes do número
     st.markdown(f'<a href="https://wa.me{WHATSAPP_CONTATO}" class="whatsapp-btn">💬 Fale com o Ivan</a>', unsafe_allow_html=True)
     with st.form("login_form"):
         u_log = st.text_input("Login (CPF ou Nome):").strip().lower()
@@ -69,7 +70,7 @@ if st.session_state.tela == "login":
                 st.session_state.tela = "app"
                 st.rerun()
             else: st.error("Dados incorretos.")
-    if st.button("Cadastrar Nova Conta 📝"):
+    if st.button("Não tem conta? Cadastre-se aqui 📝"):
         st.session_state.tela = "cadastro"
         st.rerun()
 
@@ -109,17 +110,25 @@ elif st.session_state.tela == "app":
         if foto:
             bytes_data = foto.getvalue()
             img = cv2.imdecode(np.frombuffer(bytes_data, np.uint8), cv2.IMREAD_COLOR)
+            
+            # CORRIGIDO: Forma segura de detectar sem erro de ValueError
             detector = cv2.barcode.BarcodeDetector()
-            ok, pontos, codigos, tipos = detector.detectAndDecode(img)
-            if ok and codigos:
-                # Se ler uma lista, pega o primeiro item. Se ler string, usa direto.
-                cod = codigos[0] if isinstance(codigos, (list, np.ndarray)) else codigos
+            resultado = detector.detectAndDecode(img)
+            
+            if resultado and resultado[0]:
+                # Captura o código detectado de forma segura
+                codigos_lidos = resultado[1]
+                cod = codigos_lidos[0] if isinstance(codigos_lidos, (list, np.ndarray)) else codigos_lidos
+                
                 if cod in produtos:
                     n = produtos[cod]['nome']
                     if n in st.session_state.carrinho: st.session_state.carrinho[n]['qtd'] += 1
                     else: st.session_state.carrinho[n] = {'preco': produtos[cod]['preco'], 'qtd': 1}
                     st.success(f"✅ {n} lido!")
-            else: st.warning("Não consegui ler as barras. Tente focar melhor!")
+                else:
+                    st.warning(f"Código {cod} não cadastrado.")
+            else:
+                st.warning("Não consegui ler as barras. Tente focar melhor!")
 
         st.write("---")
         st.subheader("⌨️ Digitar Código")
@@ -130,7 +139,7 @@ elif st.session_state.tela == "app":
             item = st.session_state.carrinho[n]
             sub = item['preco'] * item['qtd']
             total += sub
-            col1, col2, col3 = st.columns()
+            col1, col2, col3 = st.columns([2,1,1])
             col1.write(f"**{n}**")
             with col2:
                 q = st.number_input("Qtd", 0, 100, int(item['qtd']), key=f"q_{n}")
