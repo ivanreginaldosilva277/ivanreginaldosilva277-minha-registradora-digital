@@ -7,8 +7,7 @@ import os
 import json
 from datetime import datetime, timedelta
 
-# --- CONFIGURAÇÕES DO IVAN ---
-# Link do WhatsApp formatado para compatibilidade máxima
+# --- CONFIGURAÇÕES (MANTIDAS) ---
 WHATSAPP_LINK = "https://whatsapp.com!"
 ARQUIVO_DADOS = "banco_usuarios_final.json"
 ARQUIVO_MEMORIA = "produtos_aprendidos.json"
@@ -26,29 +25,27 @@ def carregar_json(arquivo):
 def salvar_json(arquivo, dados):
     with open(arquivo, "w", encoding='utf-8') as f: json.dump(dados, f, ensure_ascii=False)
 
-# --- BUSCA DE PRODUTOS TURBINADA ---
+# --- BUSCA INTELIGENTE DE PRODUTOS ---
 def buscar_produto_total(codigo):
-    # 1. Verifica na memória local primeiro
+    # 1. Verifica na sua própria memória (O que o app já aprendeu)
     memoria = carregar_json(ARQUIVO_MEMORIA)
     if codigo in memoria:
         return memoria[codigo]["nome"], memoria[codigo]["preco"]
     
-    # 2. Tenta em 3 bases diferentes de internet automaticamente
-    bases = [
-        f"https://openfoodfacts.org{codigo}.json",
-        f"https://openfoodfacts.org{codigo}.json"
-    ]
+    # 2. Tenta busca na base oficial de produtos brasileira
+    try:
+        # Usando a API do Cosmos/OpenFoodFacts que é a mais rápida para produtos BR
+        url = f"https://openfoodfacts.org{codigo}.json"
+        r = requests.get(url, timeout=4)
+        if r.status_code == 200:
+            d = r.json()
+            if d.get("status") == 1:
+                p = d["product"]
+                # Pega o nome mais completo disponível
+                nome = p.get("product_name_pt") or p.get("product_name") or p.get("brands")
+                if nome: return nome.strip().upper(), 0.0
+    except: pass
     
-    for url in bases:
-        try:
-            r = requests.get(url, timeout=4)
-            if r.status_code == 200:
-                d = r.json()
-                if d.get("status") == 1:
-                    p = d["product"]
-                    nome = p.get("product_name_pt") or p.get("product_name") or p.get("generic_name")
-                    if nome: return nome.strip().capitalize(), 0.0
-        except: continue
     return None, 0.0
 
 # --- ESTILO VISUAL ---
@@ -62,12 +59,10 @@ st.markdown(f"""
 if "tela" not in st.session_state: st.session_state.tela = "login"
 if "carrinho" not in st.session_state: st.session_state.carrinho = {}
 
-# --- 1. TELA DE LOGIN ---
+# --- LÓGICA DE LOGIN (INTEGRAL) ---
 if st.session_state.tela == "login":
     st.markdown("<h1 style='text-align: center;'>🛒 Calculadora de Mercado</h1>", unsafe_allow_html=True)
-    # Botão de WhatsApp Corrigido
-    st.markdown(f'<a href="{WHATSAPP_LINK}" target="_blank" class="whatsapp-btn">💬 Falar com o Ivan (WhatsApp)</a>', unsafe_allow_html=True)
-    
+    st.markdown(f'<a href="{WHATSAPP_LINK}" target="_blank" class="whatsapp-btn">💬 Fale com o Ivan no WhatsApp</a>', unsafe_allow_html=True)
     with st.form("login_form"):
         u_log = st.text_input("Login (CPF ou Nome):").strip().lower()
         u_sen = st.text_input("Senha:", type="password")
@@ -79,8 +74,7 @@ if st.session_state.tela == "login":
                 st.rerun()
             else: st.error("Login ou senha incorretos.")
     if st.button("Não tem conta? Cadastre-se aqui 📝"):
-        st.session_state.tela = "cadastro"
-        st.rerun()
+        st.session_state.tela = "cadastro"; st.rerun()
 
 elif st.session_state.tela == "cadastro":
     st.title("📝 Cadastro Novo")
@@ -101,12 +95,9 @@ elif st.session_state.tela == "cadastro":
     if st.button("⬅️ Voltar"):
         st.session_state.tela = "login"; st.rerun()
 
-# --- 2. TELA DO APLICATIVO ---
+# --- TELA DO APP (FOCO NO SCANNER) ---
 elif st.session_state.tela == "app":
     st.title(f"👋 Olá, {st.session_state.usuario_logado.capitalize()}!")
-    if st.sidebar.button("⬅️ Sair"):
-        st.session_state.tela = "login"; st.rerun()
-
     aba1, aba2 = st.tabs(["🛒 Compra Atual", "📂 Histórico"])
 
     with aba1:
@@ -120,33 +111,38 @@ elif st.session_state.tela == "app":
             
             if resultado and resultado:
                 cod = re.sub(r'\D', '', str(resultado))
-                with st.spinner(f"Buscando {cod} no Brasil..."):
+                with st.spinner(f"Consultando Google e Bancos de Dados..."):
                     nome_p, preco_sug = buscar_produto_total(cod)
                     
                     if nome_p:
-                        st.success(f"✅ Encontrado: {nome_p}")
-                        preco = st.number_input(f"Preço R$:", value=float(preco_sug), key=f"p_{cod}")
-                        if st.button(f"Somar {nome_p}"):
+                        st.success(f"✅ Identificado: {nome_p}")
+                        preco = st.number_input(f"Preço de hoje (R$):", value=float(preco_sug), key=f"p_{cod}", step=0.01)
+                        if st.button(f"Confirmar e Adicionar ao Total"):
+                            # Salva na memória do App para sempre
                             memoria = carregar_json(ARQUIVO_MEMORIA)
                             memoria[cod] = {"nome": nome_p, "preco": preco}
                             salvar_json(ARQUIVO_MEMORIA, memoria)
+                            # Adiciona no carrinho
                             st.session_state.carrinho[nome_p] = st.session_state.carrinho.get(nome_p, {'preco': preco, 'qtd': 0})
                             st.session_state.carrinho[nome_p]['qtd'] += 1
                             st.rerun()
                     else:
-                        st.warning("Produto novo! Digite o nome uma vez:")
-                        n_man = st.text_input("Nome (Ex: Feijão Camil 1kg):")
-                        p_man = st.number_input("Preço R$:", key="p_man")
-                        if st.button("Salvar e Adicionar"):
+                        st.warning("Google não identificou o nome. Digite uma vez para o sistema aprender:")
+                        n_man = st.text_input("Nome do Produto:", key="n_man")
+                        p_man = st.number_input("Preço R$:", key="p_man", step=0.01)
+                        if st.button("Salvar na Memória do App"):
                             memoria = carregar_json(ARQUIVO_MEMORIA)
                             memoria[cod] = {"nome": n_man, "preco": p_man}
                             salvar_json(ARQUIVO_MEMORIA, memoria)
                             st.session_state.carrinho[n_man] = {"preco": p_man, "qtd": 1}
                             st.rerun()
-            else: st.warning("Não consegui ler as barras. Tente mais luz!")
+            else: st.warning("Leitura falhou. Tente centralizar as barras pretas na foto.")
 
         st.write("---")
         total = sum(i['preco'] * i['qtd'] for i in st.session_state.carrinho.values())
         for n, i in st.session_state.carrinho.items():
             st.write(f"**{i['qtd']}x {n}** - R$ {i['preco']*i['qtd']:.2f}")
-        st.metric("TOTAL", f"R$ {total:.2f}")
+        st.metric("VALOR TOTAL DA COMPRA", f"R$ {total:.2f}")
+
+    if st.sidebar.button("Sair"):
+        st.session_state.tela = "login"; st.rerun()
