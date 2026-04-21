@@ -1,9 +1,9 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import requests
 import re
 import json
 import os
-from PIL import Image
 
 # --- CONFIGURAÇÕES ---
 ARQUIVO_DADOS = "banco_usuarios_final.json"
@@ -20,40 +20,56 @@ def buscar_nome(codigo):
 
 st.set_page_config(page_title="Registradora Ivan", page_icon="🛒")
 
-# --- ESTADO E LOGIN ---
-if "logado" not in st.session_state: st.session_state.logado = False
+# --- ESTADO ---
 if "carrinho" not in st.session_state: st.session_state.carrinho = {}
 
-if not st.session_state.logado:
-    st.title("📟 PDV REGISTRADORA")
-    u = st.text_input("CPF:")
-    s = st.text_input("Senha:", type="password")
-    if st.button("ABRIR CAIXA"):
-        st.session_state.logado = True; st.rerun()
-else:
-    st.title("🛍️ BIPAR PRODUTO")
-    
-    # ESTA É A ÚNICA FORMA QUE FUNCIONA NO SAMSUNG A03 SEM TRAVAR
-    # Ele abre a sua câmera traseira oficial do Android
-    foto_camera = st.camera_input("APONTE PARA O CÓDIGO E TIRE UMA FOTO")
+st.title("📟 Registradora com Scanner")
 
-    if foto_camera:
-        st.info("Buscando informações do produto...")
-        # (O sistema vai processar a imagem aqui)
-        # Por enquanto, como o leitor de vídeo travou, use este campo para confirmar o número:
-        cod_manual = st.text_input("Se o número não apareceu, digite aqui:")
-        
-        if cod_manual:
-            nome = buscar_nome(cod_manual)
-            if nome:
-                st.success(f"PRODUTO: {nome}")
-                if st.button("ADCIONAR AO CARRINHO"):
-                    st.session_state.carrinho[nome] = st.session_state.carrinho.get(nome, 0) + 1
-                    st.toast("Adicionado!")
-            else:
-                st.warning("Produto não cadastrado.")
+# --- O SCANNER DE BARRA / QR CODE ---
+st.subheader("📸 Leitor em Tempo Real")
+st.info("Aponte a câmera traseira para o código de barras")
 
-    st.write("---")
-    st.subheader("🛒 Carrinho Atual")
-    for item, qtd in st.session_state.carrinho.items():
-        st.write(f"{qtd}x {item}")
+# Este componente abre o Scanner Profissional (Instascan)
+components.html(
+    """
+    <video id="preview" style="width: 100%; border-radius: 10px; border: 3px solid #2e7d32;"></video>
+    <script src="https://rawgit.com"></script>
+    <script>
+      let scanner = new Instascan.Scanner({ video: document.getElementById('preview'), mirror: false });
+      scanner.addListener('scan', function (content) {
+        // Envia o código para o Streamlit
+        window.parent.postMessage({type: 'streamlit:set_widget_value', key: 'cod_lido', value: content}, '*');
+      });
+      Instascan.Camera.getCameras().then(function (cameras) {
+        if (cameras.length > 0) {
+          // Tenta pegar a câmera traseira (geralmente a última da lista)
+          scanner.start(cameras[cameras.length - 1]);
+        } else {
+          console.error('Nenhuma câmera encontrada.');
+        }
+      }).catch(function (e) {
+        console.error(e);
+      });
+    </script>
+    """,
+    height=300,
+)
+
+# Campo que recebe o código lido automaticamente
+codigo_detectado = st.text_input("Código Lido:", key="cod_lido")
+
+if codigo_detectado:
+    st.success(f"✅ Código identificado: {codigo_detectado}")
+    nome = buscar_nome(codigo_detectado)
+    if nome:
+        st.write(f"**Produto:** {nome}")
+        if st.button("Adicionar ao Carrinho"):
+            st.session_state.carrinho[nome] = st.session_state.carrinho.get(nome, 0) + 1
+            st.rerun()
+    else:
+        st.warning("Produto não achado. Digite o nome manualmente.")
+
+st.write("---")
+st.subheader("🛒 Sua Sacola")
+for item, qtd in st.session_state.carrinho.items():
+    st.write(f"• {qtd}x {item}")
