@@ -1,4 +1,5 @@
 import streamlit as st
+from streamlit_camera_desktop_web_rtc import camera_desktop_web_rtc
 import requests
 import re
 import os
@@ -8,7 +9,7 @@ import json
 WHATSAPP_CONTATO = "5511917519746"
 ARQUIVO_DADOS = "banco_mercado_final.json"
 
-st.set_page_config(page_title="Minha Compra Segura", page_icon="🛒")
+st.set_page_config(page_title="Calculadora Inteligente", page_icon="🛒")
 
 def buscar_nome_internet(codigo):
     try:
@@ -23,36 +24,39 @@ def buscar_nome_internet(codigo):
 
 if "carrinho" not in st.session_state: st.session_state.carrinho = {}
 
-# --- INTERFACE ---
 st.title("🛒 Calculadora de Mercado")
 
-st.subheader("📟 Scanner de Barras")
-st.write("Clique no campo abaixo e use o **Scanner do Teclado** do seu Samsung:")
+# --- O LEITOR AUTOMÁTICO ---
+st.subheader("📟 Leitor de Código de Barras")
+st.write("Clique no botão abaixo para ativar o scanner automático:")
 
-# Campo de texto que processa o código sozinho ao receber o dado
-codigo_lido = st.text_input("Toque aqui para escanear:", key="input_scan")
+# Este componente abre a câmera e fica procurando o código sozinho
+codigo_lido = camera_desktop_web_rtc()
 
 if codigo_lido:
-    cod = re.sub(r'\D', '', codigo_lido)
-    with st.spinner(f"Buscando produto..."):
-        nome_p = buscar_nome_internet(cod)
-        if nome_p:
-            if nome_p not in st.session_state.carrinho:
-                st.session_state.carrinho[nome_p] = {'preco': 0.0, 'qtd': 0}
-            st.session_state.carrinho[nome_p]['qtd'] += 1
-            st.success(f"✅ {nome_p} adicionado!")
-            # Limpa para o próximo
-            st.session_state.input_scan = ""
-            st.rerun()
-        else:
-            st.warning("Produto não encontrado. Tente outro!")
+    cod = str(codigo_lido).strip()
+    if "ultimo_codigo" not in st.session_state or st.session_state.ultimo_codigo != cod:
+        st.session_state.ultimo_codigo = cod
+        with st.spinner(f"Lendo código {cod}..."):
+            nome_p = buscar_nome_internet(cod)
+            if nome_p:
+                if nome_p not in st.session_state.carrinho:
+                    st.session_state.carrinho[nome_p] = {'preco': 0.0, 'qtd': 0}
+                st.session_state.carrinho[nome_p]['qtd'] += 1
+                st.success(f"✅ {nome_p} adicionado!")
+                st.rerun()
 
 st.write("---")
-total = sum(i['preco'] * i['qtd'] for i in st.session_state.carrinho.values())
+# --- EXIBIÇÃO DO CARRINHO ---
+total = 0
 for n, i in st.session_state.carrinho.items():
-    col1, col2 = st.columns([2,1])
-    col1.write(f"**{i['qtd']}x {n}**")
-    p = col2.number_input("R$", value=float(i['preco']), key=f"p_{n}")
-    st.session_state.carrinho[n]['preco'] = p
+    c1, c2, c3 = st.columns([2,1,1])
+    c1.write(f"**{n}**")
+    with c2:
+        p = st.number_input("R$", value=float(i['preco']), key=f"p_{n}")
+        st.session_state.carrinho[n]['preco'] = p
+    with c3:
+        st.write(f"Qtd: {i['qtd']}")
+    total += (st.session_state.carrinho[n]['preco'] * i['qtd'])
 
-st.metric("TOTAL", f"R$ {total:.2f}")
+st.metric("VALOR TOTAL", f"R$ {total:.2f}")
