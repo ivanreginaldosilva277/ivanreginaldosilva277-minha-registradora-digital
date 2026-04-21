@@ -5,7 +5,6 @@ import re
 
 st.set_page_config(page_title="Scanner ZL", page_icon="🛒")
 
-# Função para buscar nome na internet
 def buscar_nome(codigo):
     try:
         url = f"https://openfoodfacts.org{codigo}.json"
@@ -18,42 +17,42 @@ def buscar_nome(codigo):
 
 if "carrinho" not in st.session_state: st.session_state.carrinho = {}
 
-st.title("🛒 Scanner Profissional Ivan")
+st.title("🛒 Scanner Profissional")
 
-# --- LEITOR DE CÓDIGO DE BARRAS VIVO ---
-st.subheader("📟 Aponte e Bipe")
+# --- SCANNER AUTOMÁTICO (HTML5) ---
+st.subheader("📟 Aponte a Câmera")
 
-# Este bloco de código cria o leitor automático que você quer
+# Janela do Scanner Vivo
 components.html(
     """
+    <div id="reader" style="width:100%;"></div>
     <script src="https://unpkg.com"></script>
-    <div id="reader" style="width: 100%;"></div>
     <script>
-        function onScanSuccess(decodedText, decodedResult) {
-            // Envia o código lido para o campo de texto do Streamlit
-            window.parent.postMessage({type: 'streamlit:set_widget_value', key: 'codigo_qr', value: decodedText}, '*');
+        function onScanSuccess(decodedText) {
+            // Envia o código para o Streamlit
+            const input = window.parent.document.querySelectorAll('input')[0];
+            input.value = decodedText;
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+            // Para o scanner após ler
             html5QrcodeScanner.clear();
         }
-        let html5QrcodeScanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: 250 });
+        var html5QrcodeScanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: 250 });
         html5QrcodeScanner.render(onScanSuccess);
     </script>
     """,
-    height=400,
+    height=450,
 )
 
-# Campo invisível que recebe o dado do scanner
-codigo_lido = st.text_input("Código capturado:", key="codigo_qr")
+# Campo que recebe o código
+cod_lido = st.text_input("Código Lido:", key="codigo_capturado")
 
-if codigo_lido:
-    cod = re.sub(r'\D', '', str(codigo_lido))
-    with st.spinner(f"Identificando {cod}..."):
+if cod_lido:
+    cod = re.sub(r'\D', '', str(cod_lido))
+    with st.spinner(f"Buscando {cod}..."):
         nome = buscar_nome(cod)
         if nome:
             st.success(f"✅ {nome}")
             preco = st.number_input("Preço R$:", value=0.0, key=f"p_{cod}")
-            if st.button(f"Adicionar {nome}"):
-                if nome not in st.session_state.carrinho:
-                    st.session_state.carrinho[nome] = {'preco': preco, 'qtd': 1}
-                else:
-                    st.session_state.carrinho[nome]['qtd'] += 1
+            if st.button("Adicionar"):
+                st.session_state.carrinho[nome] = {'preco': preco, 'qtd': 1}
                 st.rerun()
