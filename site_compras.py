@@ -4,150 +4,88 @@ import json
 import os
 import cv2
 import numpy as np
+import requests
 from datetime import datetime, timedelta
 
-# --- CONFIGURAÇÕES DO IVAN ---
+# --- CONFIGURAÇÕES ---
 WHATSAPP_CONTATO = "5511917519746"
 ARQUIVO_DADOS = "banco_mercado_final.json"
 
 st.set_page_config(page_title="Minha Compra Segura", page_icon="🛒", layout="centered")
 
-# --- BANCO DE DADOS ---
-produtos = {
-    "7894900011517": {"nome": "Coca-Cola Lata 350ml", "preco": 4.50},
-    "7894900010015": {"nome": "Coca-Cola Pet 2L", "preco": 11.90},
-    "7894900700046": {"nome": "Guaraná Antarctica 2L", "preco": 9.50},
-    "7896005818018": {"nome": "Arroz Tio João 5kg", "preco": 32.50},
-    "7896000705023": {"nome": "Feijão Camil 1kg", "preco": 9.20},
-    "7891000100170": {"nome": "Chá Leão Hortelã", "preco": 3.50},
-    "10": {"nome": "Pão Francês (Un)", "preco": 0.50}
-}
+# --- FUNÇÃO PARA BUSCAR NOME NA INTERNET ---
+def buscar_nome_internet(codigo):
+    try:
+        url = f"https://openfoodfacts.org{codigo}.json"
+        resposta = requests.get(url, timeout=5)
+        if resposta.status_code == 200:
+            dados = resposta.json()
+            if dados.get("status") == 1:
+                return dados["product"].get("product_name", "Produto Desconhecido")
+    except:
+        return None
+    return None
 
-# --- ESTILO VISUAL ---
-st.markdown(f"""
-    <style>
-    .stButton>button {{ width: 100%; border-radius: 10px; background-color: #2e7d32; color: white; height: 3em; font-weight: bold; }}
-    .whatsapp-btn {{ background-color: #25d366; color: white; padding: 15px; border-radius: 15px; text-align: center; text-decoration: none; display: block; font-weight: bold; margin-bottom: 20px; }}
-    </style>
-    """, unsafe_allow_html=True)
-
-# --- FUNÇÕES DE DADOS ---
+# --- CARREGAR DADOS ---
 def carregar_dados():
     if os.path.exists(ARQUIVO_DADOS):
         with open(ARQUIVO_DADOS, "r") as f: return json.load(f)
-    return {"usuarios": {}, "historico": {}}
+    return {"usuarios": {}, "historico": {}, "produtos_novos": {}}
 
 def salvar_dados(dados):
     with open(ARQUIVO_DADOS, "w") as f: json.dump(dados, f)
 
+# Produtos iniciais (Exemplos)
+produtos_base = {
+    "7894900011517": {"nome": "Coca-Cola Lata 350ml", "preco": 4.50},
+    "7891000100170": {"nome": "Chá Leão Hortelã", "preco": 3.50}
+}
+
 if "tela" not in st.session_state: st.session_state.tela = "login"
 if "carrinho" not in st.session_state: st.session_state.carrinho = {}
 
-def processar_codigo():
-    input_usuario = st.session_state.input_scan
-    cod_limpo = re.sub(r'\D', '', input_usuario)
-    if cod_limpo in produtos:
-        item = produtos[cod_limpo]
-        n = item['nome']
-        if n in st.session_state.carrinho: st.session_state.carrinho[n]['qtd'] += 1
-        else: st.session_state.carrinho[n] = {'preco': item['preco'], 'qtd': 1}
-        st.toast(f"✅ {n} adicionado!")
-    st.session_state.input_scan = ""
+# --- TELA DE LOGIN E APP ---
+# (Mantendo a lógica de login que você já tem...)
+# [Omitido para focar na função de busca abaixo]
 
-# --- TELA DE LOGIN ---
-if st.session_state.tela == "login":
-    st.markdown("<h1 style='text-align: center;'>🛒 Calculadora de Mercado</h1>", unsafe_allow_html=True)
-    st.markdown(f'<a href="https://wa.me{WHATSAPP_CONTATO}" class="whatsapp-btn">💬 Fale com o Ivan</a>', unsafe_allow_html=True)
-    with st.form("login_form"):
-        u_log = st.text_input("Login (CPF ou Nome):").strip().lower()
-        u_sen = st.text_input("Senha:", type="password")
-        if st.form_submit_button("ENTRAR 🚀"):
-            dados = carregar_dados()
-            if u_log in dados["usuarios"] and dados["usuarios"][u_log]["senha"] == u_sen:
-                st.session_state.usuario_logado = u_log
-                st.session_state.tela = "app"
-                st.rerun()
-            else: st.error("Dados incorretos.")
-    if st.button("Cadastrar Nova Conta 📝"):
-        st.session_state.tela = "cadastro"
-        st.rerun()
+# --- LÓGICA DO SCANNER DENTRO DA ABA1 ---
+# Substitua a parte do 'if resultado' por esta:
 
-# --- TELA DE CADASTRO ---
-elif st.session_state.tela == "cadastro":
-    st.title("📝 Cadastro Novo")
-    with st.form("c_form"):
-        n_c = st.text_input("Nome:")
-        c_c = st.text_input("CPF (Login):")
-        s_c = st.text_input("Senha:", type="password")
-        if st.form_submit_button("CADASTRAR ✅"):
-            login_id = re.sub(r'\D', '', c_c)
-            if n_c and login_id and s_c:
-                d = carregar_dados()
-                exp = (datetime.now() + timedelta(days=7)).strftime("%Y-%m-%d")
-                d["usuarios"][login_id] = {"nome": n_c, "senha": s_c, "exp": exp, "pago": False}
-                d["historico"][login_id] = {}
-                salvar_dados(d)
-                st.success("Sucesso! Volte ao login.")
-            else: st.error("Preencha tudo.")
-    if st.button("⬅️ Voltar"):
-        st.session_state.tela = "login"
-        st.rerun()
-
-# --- TELA DO APLICATIVO ---
-elif st.session_state.tela == "app":
-    st.title(f"👋 Olá, {st.session_state.usuario_logado.capitalize()}")
-    if st.sidebar.button("⬅️ Sair"):
-        st.session_state.tela = "login"
-        st.rerun()
-
-    aba1, aba2 = st.tabs(["🛒 Compra", "📂 Histórico"])
-
-    with aba1:
-        st.subheader("📸 Escanear por Foto")
-        foto = st.camera_input("Tire foto do código de barras")
-        
-        if foto:
-            bytes_data = foto.getvalue()
-            img = cv2.imdecode(np.frombuffer(bytes_data, np.uint8), cv2.IMREAD_COLOR)
-            detector = cv2.barcode.BarcodeDetector()
-            resultado = detector.detectAndDecode(img)
-            
-            if resultado and resultado[0]:
-                # Captura apenas o código (primeiro item do resultado)
-                cod_lido = str(resultado[0]).strip()
-                # Limpa qualquer caractere estranho que o OpenCV possa colocar
-                cod_lido = re.sub(r'\W+', '', cod_lido)
+            if resultado:
+                cod = str(resultado).strip()
+                cod = re.sub(r'\W+', '', cod)
                 
-                if cod_lido in produtos:
-                    n = produtos[cod_lido]['nome']
-                    if n in st.session_state.carrinho:
-                        st.session_state.carrinho[n]['qtd'] += 1
-                    else:
-                        st.session_state.carrinho[n] = {'preco': produtos[cod_lido]['preco'], 'qtd': 1}
-                    st.success(f"✅ {n} lido!")
-                    st.rerun()
-                else:
-                    st.warning(f"Código {cod_lido} não cadastrado.")
-            else:
-                st.warning("Não consegui ler. Tente focar melhor!")
+                # 1. Tenta achar na sua lista ou na internet
+                dados_globais = carregar_dados()
+                nome_encontrado = None
+                preco_sugerido = 0.0
 
-        st.write("---")
-        st.subheader("⌨️ Digitar Código")
-        st.text_input("Ou digite aqui:", key="input_scan", on_change=processar_codigo)
-        
-        total = 0
-        for n in list(st.session_state.carrinho.keys()):
-            item = st.session_state.carrinho[n]
-            sub = item['preco'] * item['qtd']
-            total += sub
-            col1, col2, col3 = st.columns()
-            col1.write(f"**{n}**")
-            with col2:
-                q = st.number_input("Qtd", 0, 100, int(item['qtd']), key=f"q_{n}")
-                if q != item['qtd']:
-                    if q == 0: del st.session_state.carrinho[n]
-                    else: st.session_state.carrinho[n]['qtd'] = q
-                    st.rerun()
-            col3.write(f"R${sub:.2f}")
-        
-        st.metric("TOTAL", f"R$ {total:.2f}")
+                if cod in produtos_base:
+                    nome_encontrado = produtos_base[cod]['nome']
+                    preco_sugerido = produtos_base[cod]['preco']
+                elif cod in dados_globais["produtos_novos"]:
+                    nome_encontrado = dados_globais["produtos_novos"][cod]['nome']
+                    preco_sugerido = dados_globais["produtos_novos"][cod]['preco']
+                else:
+                    with st.spinner("Buscando nome na internet..."):
+                        nome_encontrado = buscar_nome_internet(cod)
+                
+                if nome_encontrado:
+                    st.write(f"🔎 **Produto:** {nome_encontrado}")
+                    # Pergunta o preço se for novo ou permite confirmar o atual
+                    p_mercado = st.number_input(f"Preço no mercado (R$):", value=preco_sugerido, key=f"p_input_{cod}")
+                    
+                    if st.button(f"Confirmar e Adicionar {nome_encontrado}", key=f"btn_{cod}"):
+                        # Salva para o sistema "aprender"
+                        dados_globais["produtos_novos"][cod] = {"nome": nome_encontrado, "preco": p_mercado}
+                        salvar_dados(dados_globais)
+                        
+                        # Adiciona no carrinho
+                        if nome_encontrado in st.session_state.carrinho:
+                            st.session_state.carrinho[nome_encontrado]['qtd'] += 1
+                        else:
+                            st.session_state.carrinho[nome_encontrado] = {'preco': p_mercado, 'qtd': 1}
+                        st.success("Adicionado!")
+                        st.rerun()
+                else:
+                    st.warning(f"Código {cod} não encontrado nem na internet. Digite o nome manualmente.")
