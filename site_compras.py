@@ -1,5 +1,4 @@
 import streamlit as st
-from streamlit_barcode_reader import barcode_reader
 import requests
 import re
 
@@ -20,26 +19,27 @@ if "carrinho" not in st.session_state: st.session_state.carrinho = {}
 
 st.title("🛒 Scanner Ultra Rápido")
 
-# --- O BOTÃO QUE ABRE A CÂMERA DE VERDADE ---
+# --- O CAMPO QUE ACIONA O SCANNER ---
 st.subheader("📟 Bipar Produto")
-st.write("Clique no botão abaixo para abrir a câmera traseira:")
+st.write("Toque no campo abaixo. No seu Samsung, escolha o ícone de **Câmera/Scanner** que aparece em cima do teclado.")
 
-# Este comando cria o botão e abre a câmera automaticamente
-codigo_lido = barcode_reader(label="ACIONAR SCANNER 📷")
+# Este campo de texto é o "gatilho" para o scanner do seu celular
+cod_lido = st.text_input("Toque aqui para escanear", key="input_scan", placeholder="Aponte a câmera...")
 
-if codigo_lido:
-    cod = re.sub(r'\D', '', str(codigo_lido))
+if cod_lido:
+    cod = re.sub(r'\D', '', cod_lido) # Limpa para deixar só números
     if cod:
-        with st.spinner(f"Lendo código {cod}..."):
+        with st.spinner("Buscando produto..."):
             nome = buscar_nome(cod)
             if nome:
                 st.success(f"✅ {nome}")
                 preco = st.number_input("Preço R$:", value=0.0, key=f"p_{cod}")
-                if st.button(f"Confirmar e Somar"):
+                if st.button(f"Confirmar e Somar {nome}"):
                     if nome not in st.session_state.carrinho:
                         st.session_state.carrinho[nome] = {'preco': preco, 'qtd': 1}
                     else:
                         st.session_state.carrinho[nome]['qtd'] += 1
+                    st.session_state.input_scan = "" # Limpa para o próximo
                     st.rerun()
             else:
                 st.warning("Não achei na internet. Digite o nome:")
