@@ -1,3 +1,2 @@
 streamlit
-streamlit-camera-desktop-web-rtc
-requests
+streamlit-js-eval
