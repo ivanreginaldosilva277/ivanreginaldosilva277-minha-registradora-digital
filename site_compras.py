@@ -1,44 +1,62 @@
 import streamlit as st
-from streamlit_js_eval import streamlit_js_eval
+import cv2
+import numpy as np
+import requests
 import re
 
-st.set_page_config(page_title="Calculadora Inteligente", page_icon="🛒")
+st.set_page_config(page_title="Calculadora Ivan", page_icon="🛒")
 
-# Banco de dados simples para teste
-produtos = {
-    "7894900011517": {"nome": "Coca-Cola Lata", "preco": 4.50},
-    "7896005818018": {"nome": "Arroz Tio João 5kg", "preco": 32.50},
-    "7891000100170": {"nome": "Chá Leão Hortelã", "preco": 3.50}
-}
+# Função para buscar o nome do produto na internet (Banco de dados mundial)
+def buscar_produto(codigo):
+    try:
+        url = f"https://openfoodfacts.org{codigo}.json"
+        r = requests.get(url, timeout=5)
+        if r.status_code == 200 and r.json().get("status") == 1:
+            return r.json()["product"].get("product_name", "Produto Desconhecido")
+    except: return None
+    return None
 
 if "carrinho" not in st.session_state:
     st.session_state.carrinho = {}
 
 st.title("🛒 Calculadora de Mercado")
 
-# --- BOTÃO DO SCANNER ---
+# --- BOTÃO DE LER CÓDIGO ---
 st.subheader("📟 Escanear Produto")
-# Este comando aciona o leitor do próprio navegador/celular
-codigo_lido = streamlit_js_eval(js_expressions='window.prompt("Aponte para o código de barras e digite ou cole o número:")')
+foto = st.camera_input("Clique no botão abaixo para ler o código")
 
-if codigo_lido:
-    cod = re.sub(r'\D', '', str(codigo_lido))
-    if cod in produtos:
-        item = produtos[cod]
-        nome_p = item['nome']
-        if nome_p in st.session_state.carrinho:
-            st.session_state.carrinho[nome_p]['qtd'] += 1
-        else:
-            st.session_state.carrinho[nome_p] = {'preco': item['preco'], 'qtd': 1}
-        st.success(f"✅ {nome_p} adicionado!")
+if foto:
+    # 1. Converter a foto para o leitor entender
+    imagem = cv2.imdecode(np.frombuffer(foto.getvalue(), np.uint8), cv2.IMREAD_COLOR)
+    
+    # 2. Motor de leitura de barras
+    detector = cv2.barcode.BarcodeDetector()
+    resultado = detector.detectAndDecode(imagem)
+    
+    if resultado and resultado[0]:
+        codigo = resultado[0]
+        with st.spinner(f"Buscando código {codigo}..."):
+            nome = buscar_produto(codigo)
+            if nome:
+                if nome not in st.session_state.carrinho:
+                    st.session_state.carrinho[nome] = {"preco": 0.0, "qtd": 1}
+                else:
+                    st.session_state.carrinho[nome]["qtd"] += 1
+                st.success(f"✅ {nome} adicionado!")
+            else:
+                st.warning(f"Código {codigo} lido, mas não achei o nome.")
     else:
-        st.warning(f"Código {cod} não cadastrado.")
+        st.error("Não consegui ler as barras. Tente focar melhor ou deixar o código bem reto na foto.")
 
-# --- EXIBIÇÃO ---
+# --- EXIBIÇÃO DO CARRINHO ---
 st.write("---")
 total = 0
 for n, i in st.session_state.carrinho.items():
-    st.write(f"**{i['qtd']}x {n}** - R$ {i['preco']*i['qtd']:.2f}")
-    total += i['preco'] * i['qtd']
+    col1, col2, col3 = st.columns([2, 1, 1])
+    col1.write(f"**{n}**")
+    p = col2.number_input("R$", value=float(i['preco']), key=f"p_{n}")
+    st.session_state.carrinho[n]['preco'] = p
+    col3.write(f"Qtd: {i['qtd']}")
+    total += p * i['qtd']
 
-st.metric("TOTAL", f"R$ {total:.2f}")
+st.metric("TOTAL DA COMPRA", f"R$ {total:.2f}")
