@@ -13,7 +13,7 @@ st.title("🛒 Minha Registradora Digital")
 if 'carrinho' not in st.session_state:
     st.session_state.carrinho = []
 
-# 2. Banco de Dados Simples
+# 2. Banco de Dados Simples (Você pode adicionar mais aqui)
 mercado_db = {
     "7891234567890": {"nome": "Arroz 5kg", "preco": 25.50},
     "7899876543210": {"nome": "Feijão 1kg", "preco": 8.90},
@@ -45,28 +45,23 @@ col1, col2 = st.columns([2, 1])
 
 with col1:
     st.subheader("Scanner")
-    # CONFIGURAÇÃO CORRIGIDA AQUI:
+    # REMOVIDO rtc_configuration PARA EVITAR O ERRO DE HOSTNAME
     webrtc_streamer(
         key="scanner",
         mode=WebRtcMode.SENDRECV,
         video_frame_callback=video_frame_callback,
-        rtc_configuration={
-            "iceServers": [{"urls": ["stun:://google.com"]}]
-        },
         media_stream_constraints={"video": True, "audio": False},
         async_processing=True,
     )
 
 with col2:
     st.subheader("Seu Carrinho")
-    total = 0.0
     
-    # Botão para forçar a atualização da tela
-    if st.button("🔄 Atualizar Lista"):
+    if st.button("🔄 Atualizar Carrinho"):
         st.rerun()
 
     st.divider()
-
+    total = 0.0
     if st.session_state.carrinho:
         for i, produto in enumerate(st.session_state.carrinho):
             st.write(f"**{i+1}. {produto['nome']}**")
@@ -74,7 +69,7 @@ with col2:
             total += produto['preco']
         st.divider()
     else:
-        st.info("Aponte para um código de barras e clique em Atualizar.")
+        st.info("Aponte para um código e clique em Atualizar.")
     
     st.write(f"### TOTAL: R$ {total:.2f}")
 
