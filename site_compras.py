@@ -1,47 +1,32 @@
-import cv2 # Biblioteca para visão computacional
-from pyzbar.pyzbar import decode # Biblioteca que identifica o código de barras
+import streamlit as st
+from streamlit_webrtc import webrtc_streamer
+import cv2
+from pyzbar.pyzbar import decode
+import numpy as np
 
-# 1. Nosso "Banco de Dados" de exemplo
+st.title("Minha Registradora Digital 🛒")
+
+# Simulação de banco de dados
 mercado_db = {
     "7891234567890": {"nome": "Arroz 5kg", "preco": 25.50},
-    "7899876543210": {"nome": "Feijão 1kg", "preco": 8.90},
-    "7895554443332": {"nome": "Leite Integral", "preco": 4.50}
+    "7899876543210": {"nome": "Feijão 1kg", "preco": 8.90}
 }
 
-carrinho = []
-total = 0.0
+# Função que processa a imagem da câmera
+def video_frame_callback(frame):
+    img = frame.to_ndarray(format="bgr24")
+    
+    # Detectar códigos de barras
+    codigos = decode(img)
+    for obj in codigos:
+        codigo_lido = obj.data.decode('utf-8')
+        # Aqui você pode adicionar lógica para salvar o código lido
+        # Mas atenção: esta função roda em uma "thread" separada
+        print(f"Código detectado: {codigo_lido}")
+        
+    return frame
 
-def adicionar_ao_carrinho(codigo):
-    global total
-    if codigo in mercado_db:
-        produto = mercado_db[codigo]
-        carrinho.append(produto)
-        total += produto['preco']
-        print(f"Adicionado: {produto['nome']} - R$ {produto['preco']:.2f}")
-        print(f"Total Atual: R$ {total:.2f}")
-    else:
-        print("Produto não cadastrado!")
+# Criar o componente de vídeo no site
+webrtc_streamer(key="scanner", video_frame_callback=video_frame_callback)
 
-# 2. Lógica para abrir a câmera e ler
-def iniciar_scanner():
-    cap = cv2.VideoCapture(0) # Abre a câmera do celular/pc
-    print("Aproxime o código de barras da câmera... (Pressione 'q' para sair)")
-
-    while True:
-        _, frame = cap.read()
-        codigos = decode(frame) # Tenta encontrar um código na imagem
-
-        for obj in codigos:
-            codigo_lido = obj.data.decode('utf-8')
-            adicionar_ao_carrinho(codigo_lido)
-            cv2.waitKey(2000) # Espera 2 segundos para não ler o mesmo item mil vezes
-
-        cv2.imshow("Scanner de Compras", frame)
-        if cv2.waitKey(1) & 0xFF == ord('q'):
-            break
-
-    cap.release()
-    cv2.destroyAllWindows()
-
-# Rodar o scanner
-iniciar_scanner()
+st.write("Aproxime o código de barras da câmera para escanear.")
