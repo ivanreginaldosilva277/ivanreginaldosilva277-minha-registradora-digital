@@ -1,4 +1,2 @@
-opencv-python-headless
-pyzbar
 streamlit
-streamlit-webrtc
+streamlit-barcode-scanner
