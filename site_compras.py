@@ -1,103 +1,99 @@
 import streamlit as st
+import cv2
+import numpy as np
+import requests
 import re
 
 # --- CONFIGURAÇÃO DA PÁGINA ---
-st.set_page_config(page_title="Assistente de Compra Ivan", page_icon="🎙️", layout="centered")
+st.set_page_config(page_title="Registradora Digital", page_icon="🛒", layout="centered")
 
-# --- ESTILO VISUAL PREMIUM ---
+# --- FUNÇÃO DE BUSCA NA INTERNET ---
+def buscar_nome(codigo):
+    try:
+        url = f"https://openfoodfacts.org{codigo}.json"
+        r = requests.get(url, timeout=3)
+        if r.status_code == 200 and r.json().get("status") == 1:
+            p = r.json()["product"]
+            return p.get("product_name_pt") or p.get("product_name")
+    except: pass
+    return None
+
+# --- ESTILO VISUAL REGISTRADORA ---
 st.markdown("""
     <style>
-    .main { background-color: #0e1117; }
-    .stApp { background-color: #0e1117; color: white; }
-    .card-total {
-        background: linear-gradient(135deg, #1e1e1e 0%, #2d2d2d 100%);
-        padding: 20px; border-radius: 20px; border-left: 8px solid #00ff88;
-        box-shadow: 0 10px 20px rgba(0,0,0,0.3); margin-bottom: 20px;
-    }
-    .item-sacola {
-        background: #1e1e1e; padding: 15px; border-radius: 15px;
-        margin-bottom: 10px; border: 1px solid #333;
-    }
-    .stButton>button { border-radius: 10px; font-weight: bold; }
+    .visor-caixa { background:#000; color:#0f0; padding:20px; border-radius:15px; text-align:right; font-family:monospace; border:4px solid #444; margin-bottom:20px; }
+    .item-linha { background:#1e1e1e; padding:15px; border-radius:12px; margin-bottom:10px; border-left: 5px solid #00ff88; color: white; }
+    .stButton>button { width:100%; border-radius:10px; font-weight:bold; }
     </style>
-    """, unsafe_allow_html=True)
-
-# --- INICIALIZAÇÃO ---
-if "sacola" not in st.session_state: st.session_state.sacola = {}
-if "limite" not in st.session_state: st.session_state.limite = 100.0
-
-# --- TELA PRINCIPAL ---
-st.markdown("<h1 style='text-align: center; color: #00ff88;'>🎙️ Assistente Ivan</h1>", unsafe_allow_html=True)
-
-# 1. VISOR DE GASTOS
-total_atual = sum(v['preco'] * v['qtd'] for v in st.session_state.sacola.values())
-porcentagem = min(total_atual / st.session_state.limite, 1.0) if st.session_state.limite > 0 else 0
-
-st.markdown(f"""
-    <div class="card-total">
-        <small style="color: #888;">TOTAL NA SACOLA</small>
-        <h1 style="margin: 0; font-size: 40px; color: #00ff88;">R$ {total_atual:.2f}</h1>
-    </div>
 """, unsafe_allow_html=True)
-st.progress(porcentagem)
 
-# 2. ENTRADA POR VOZ OU CÓDIGO
-st.write("---")
-st.subheader("🎤 Adicionar por Voz ou Código")
-instrucao = "Toque no microfone do teclado e diga: 'Produto e Valor'"
-entrada = st.text_input(instrucao, key="input_comando", placeholder="Ex: Arroz 30.50")
+if "carrinho" not in st.session_state: st.session_state.carrinho = {}
 
-if entrada:
-    # Lógica simples para separar nome de preço (ex: Arroz 25.90)
-    partes = entrada.rsplit(' ', 1)
-    nome_p = partes[0].strip().capitalize()
-    try:
-        preco_p = float(partes[1].replace(',', '.'))
-    except:
-        preco_p = 0.0
+st.title("📟 Registradora Inteligente")
+
+# 1. VISOR DE TOTAL
+total_compra = sum(v['preco'] * v['qtd'] for v in st.session_state.carrinho.values())
+st.markdown(f"<div class='visor-caixa'><small>TOTAL DA COMPRA</small><h1>R$ {total_compra:.2f}</h1></div>", unsafe_allow_html=True)
+
+# 2. SCANNER DE CÓDIGO DE BARRAS
+st.subheader("🛍️ Bipar Mercadoria")
+foto = st.camera_input("Tire foto do código de barras para registrar")
+
+if foto:
+    # Processa a foto
+    bytes_data = foto.getvalue()
+    img = cv2.imdecode(np.frombuffer(bytes_data, np.uint8), cv2.IMREAD_COLOR)
+    detector = cv2.barcode.BarcodeDetector()
+    ok, pontos, codigos, tipos = detector.detectAndDecode(img)
     
-    if nome_p not in st.session_state.sacola:
-        st.session_state.sacola[nome_p] = {'preco': preco_p, 'qtd': 1}
+    if ok:
+        cod = str(codigos).strip()
+        nome_p = buscar_nome(cod)
+        
+        if nome_p:
+            st.success(f"✅ Identificado: {nome_p}")
+            preco_p = st.number_input(f"Preço de {nome_p}:", min_value=0.0, step=0.01, key=f"p_{cod}")
+            if st.button("➕ ADICIONAR AO CARRINHO"):
+                st.session_state.carrinho[nome_p] = {'preco': preco_p, 'qtd': 1}
+                st.rerun()
+        else:
+            st.warning(f"Código {cod} não achado na internet.")
+            n_man = st.text_input("Nome do produto:")
+            p_man = st.number_input("Preço R$:", key="p_man")
+            if st.button("Salvar Manual"):
+                st.session_state.carrinho[n_man] = {'preco': p_man, 'qtd': 1}
+                st.rerun()
     else:
-        st.session_state.sacola[nome_p]['qtd'] += 1
-    
-    st.session_state.input_comando = "" # Limpa campo
-    st.rerun()
+        st.error("Não consegui ler as barras. Tente focar melhor ou limpar a lente!")
 
-# 3. LISTA DA SACOLA COM AJUSTE MANUAL
-st.write("### 🛒 Itens Selecionados")
-if not st.session_state.sacola:
-    st.info("Sua sacola está vazia. Fale ou digite algo acima!")
+# 3. LISTA DE COMPRAS COM AJUSTE DE QUANTIDADE
+st.write("---")
+st.subheader("🛒 Itens Registrados")
+
+if not st.session_state.carrinho:
+    st.info("Nenhum item bipado ainda.")
 else:
-    for nome in list(st.session_state.sacola.keys()):
-        item = st.session_state.sacola[nome]
+    for nome in list(st.session_state.carrinho.keys()):
+        item = st.session_state.carrinho[nome]
         with st.container():
-            st.markdown(f"<div class='item-sacola'><b>{nome}</b> - R$ {item['preco']:.2f}</div>", unsafe_allow_html=True)
-            c1, c2, c3, c4 = st.columns([1, 1, 1, 1])
+            st.markdown(f"<div class='item-linha'><b>{nome}</b> - R$ {item['preco']:.2f}</div>", unsafe_allow_html=True)
+            c1, c2, c3, c4 = st.columns([1,1,1,1])
             
-            # Botão de Diminuir
             if c1.button("➖", key=f"min_{nome}"):
-                if item['qtd'] > 1: st.session_state.sacola[nome]['qtd'] -= 1
-                else: del st.session_state.sacola[nome]
+                if item['qtd'] > 1: st.session_state.carrinho[nome]['qtd'] -= 1
+                else: del st.session_state.carrinho[nome]
                 st.rerun()
             
-            # Mostra Quantidade
-            c2.markdown(f"<h4 style='text-align: center;'>{item['qtd']}</h4>", unsafe_allow_html=True)
+            c2.markdown(f"<h4 style='text-align:center;'>{item['qtd']}</h4>", unsafe_allow_html=True)
             
-            # Botão de Aumentar
             if c3.button("➕", key=f"plus_{nome}"):
-                st.session_state.sacola[nome]['qtd'] += 1
+                st.session_state.carrinho[nome]['qtd'] += 1
                 st.rerun()
-            
-            # Botão de Excluir
-            if c4.button("🗑️", key=f"del_{nome}"):
-                del st.session_state.sacola[nome]
+                
+            if c4.button("❌", key=f"del_{nome}"):
+                del st.session_state.carrinho[nome]
                 st.rerun()
 
-# 4. CONFIGURAÇÕES NO RODAPÉ
-with st.sidebar:
-    st.title("⚙️ Ajustes")
-    st.session_state.limite = st.number_input("Meu limite (R$):", value=st.session_state.limite)
-    if st.button("Limpar Sacola"):
-        st.session_state.sacola = {}
-        st.rerun()
+if st.button("🗑️ LIMPAR TODA A COMPRA"):
+    st.session_state.carrinho = {}
+    st.rerun()
