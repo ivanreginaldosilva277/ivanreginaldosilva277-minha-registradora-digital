@@ -4,51 +4,76 @@ import re
 st.set_page_config(page_title="Assistente Ivan", page_icon="🎙️")
 st.title("🎙️ Assistente Ivan")
 
-# 1. Inicialização da Memória (Carrinho e Campo de Texto)
+# 1. BANCO DE DADOS (Seus produtos cadastrados)
+if 'mercado_db' not in st.session_state:
+    st.session_state.mercado_db = {
+        "7894900011517": {"nome": "Coca-Cola Lata 350ml", "preco": 4.50},
+        "7894900010015": {"nome": "Coca-Cola Pet 2L", "preco": 11.90},
+        "7894900700046": {"nome": "Guaraná Antarctica 2L", "preco": 9.50},
+        "7896005818018": {"nome": "Arroz Tio João 5kg", "preco": 32.50},
+        "7896000705023": {"nome": "Feijão Camil Carioca 1kg", "preco": 9.20},
+        "7891080000018": {"nome": "Óleo de Soja Liza 900ml", "preco": 7.80},
+        "7891150004125": {"nome": "Detergente Ypê Neutro", "preco": 2.60},
+        "7891150022068": {"nome": "Sabão OMO Lavagem Perfeita", "preco": 26.90},
+        "7891008121021": {"nome": "Café Pilão 500g", "preco": 24.90},
+        "7891000021208": {"nome": "Leite Ninho Lata 400g", "preco": 19.50},
+    }
+
+# Inicialização da Sacola
 if 'sacola' not in st.session_state:
     st.session_state.sacola = []
-if 'input_comando' not in st.session_state:
-    st.session_state.input_comando = ""
 
-# 2. Função para Processar a Voz/Texto
+# 2. FUNÇÃO INTELIGENTE (Diferencia Código de Voz)
 def processar_entrada():
-    texto = st.session_state.widget_input
+    texto = st.session_state.widget_input.strip()
     if texto:
-        # Tenta encontrar um preço (número com vírgula ou ponto) no final da frase
-        padrao_preco = re.findall(r"[-+]?\d*\b,?\d+", texto)
+        # Tira espaços e vê se é apenas um número longo (Código de barras)
+        apenas_numeros = re.sub(r'\D', '', texto)
         
-        if padrao_preco:
-            valor_str = padrao_preco[-1].replace(',', '.')
-            try:
-                valor = float(valor_str)
-                # O nome do produto é tudo antes do valor
-                nome_produto = texto.replace(padrao_preco[-1], "").strip()
-                if not nome_produto: nome_produto = "Produto"
-                
-                st.session_state.sacola.append({"nome": nome_produto, "preco": valor})
-                st.toast(f"✅ {nome_produto} adicionado!")
-            except:
-                st.error("Não entendi o valor.")
+        # LÓGICA A: CÓDIGO DE BARRAS
+        if len(apenas_numeros) >= 8:
+            if apenas_numeros in st.session_state.mercado_db:
+                item = st.session_state.mercado_db[apenas_numeros]
+                st.session_state.sacola.append({"nome": item['nome'], "preco": item['preco']})
+                st.toast(f"✅ {item['nome']} (via código)")
+            else:
+                st.error(f"Código {apenas_numeros} não cadastrado.")
         
-        # O segredo para não dar erro: Limpar via widget, não via session_state direto
-        st.session_state.widget_input = "" 
+        # LÓGICA B: VOZ (PRODUTO + VALOR)
+        else:
+            padrao_preco = re.findall(r"[-+]?\d*\b,?\d+", texto)
+            if padrao_preco:
+                try:
+                    valor_str = padrao_preco[-1].replace(',', '.')
+                    valor = float(valor_str)
+                    nome_produto = texto.replace(padrao_preco[-1], "").strip()
+                    if not nome_produto: nome_produto = "Produto Avulso"
+                    
+                    st.session_state.sacola.append({"nome": nome_produto, "preco": valor})
+                    st.toast(f"✅ {nome_produto} (R$ {valor:.2f})")
+                except:
+                    st.error("Não entendi o valor.")
+            else:
+                st.warning("Diga o nome e o valor (Ex: Leite 5.50)")
+        
+        # Limpa o campo
+        st.session_state.widget_input = ""
 
-# 3. Interface Visual
+# 3. INTERFACE VISUAL
 total = sum(item['preco'] for item in st.session_state.sacola)
 st.metric("TOTAL NA SACOLA", f"R$ {total:.2f}")
 
 st.subheader("🎤 Adicionar por Voz ou Código")
-st.info("Toque no microfone do teclado e diga: 'Nome do Produto Valor'")
+st.info("Fale o código de barras OU 'Nome e Valor' (Ex: Arroz 30.00)")
 
-# Usamos 'key' para o widget se auto-gerenciar e evitar o erro que você teve
 st.text_input(
     "Digite ou Fale:", 
     key="widget_input", 
     on_change=processar_entrada,
-    placeholder="Ex: Açúcar União 6.50"
+    placeholder="Toque no microfone e fale..."
 )
 
-# 4. Exibição da Lista
+# 4. EXIBIÇÃO DA LISTA
 st.divider()
 if st.session_state.sacola:
     for i, item in enumerate(st.session_state.sacola):
